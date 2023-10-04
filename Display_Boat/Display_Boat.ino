@@ -1,4 +1,26 @@
 /**************************************************************************
+ Whats Next?
+ Ändern des Logbook lesers auf letzte Zeile oder neues Speicher file?
+ Uhrzeit einstellen ermöglichen.
+ Auslesen des Startknopfes.
+ Ausgabe über digitalpin.
+ Sleep modus wenn das boot aus ist
+ Speicherzeit de Logbooks auf 30min und speichern wenn der motor ausgeschalten wird.
+ Variable für eingelesenen Treibstoff verbrauch und Drehzahl so wie der laufzeit des Motors.
+ lat und long daten anzeigen.
+ Umschalten zwischen GPS und Motor Spritverbrauch (Standart ist Motor).
+ Code in funktionen umstrukturieren.
+ Libary file für github erstellen.
+ Schnittstelle für Motor auslesung erstellen.
+ Files erzeugen wenn diese noch nicht vorhanden sind + richtige formatierung um sie nicht  händisch erstellen zu müssen.
+
+ 
+ 
+ 
+ 
+ 
+ 
+ 
  This is an example for our Monochrome OLEDs based on SSD1306 drivers
 
  Pick one up today in the adafruit shop!
@@ -29,6 +51,7 @@
 #include <Arduino.h>
 #include <SD.h>
 #include <ArduinoJson.h>
+#include "RTClib.h"
 
 #define IncrementTurn1 27   //define Pin for Incremental pin 1
 #define IncrementTurn2 25  //define Pin for Incremental pin 2
@@ -96,7 +119,8 @@ String errorMassageSMS;
 //JSON Object
 struct Config {
   int index;
-  char time[10];
+  char time[15];
+  char date[17];
   char skipper[10];
   double speed;
   double fuel;
@@ -317,6 +341,9 @@ char Time[]  = "TIME: 00:00:00";
 char Date[]  = "DATE: 00-00-2000";
 byte last_second, Second, Minute, Hour, Day, Month;
 int Year;
+RTC_DS3231 rtc;
+char daysOfTheWeek[7][12] = {"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"};
+
 /****************************************************************Setup***********************************************************/
 void setup() {
   Serial.begin(9600);
@@ -387,24 +414,43 @@ file = SD.open(skipperFile, FILE_READ); //read the name of the Skipper from the 
         file.close(); // Close the file after counting
 
 readSIMConfigFromSD();
-sendDataviaSIMtoServer("OK");
+//sendDataviaSIMtoServer("OK");
 jsonFromSd(logbook, config);
 fuelConsumption = config.fuel;
 actualTripDistance = config.trip;
+
+//read RTC
+  if (! rtc.begin(&I2Cone)) {
+    Serial.println("Couldn't find RTC");
+    Serial.flush();
+    while (1) delay(10);
+  }
+//Get time from RTC
+setSyncProvider(syncProvider);   // the function to get the time from the RTC
+setSyncInterval(5);            //sync Time Library to RTC every 5 seconds
+
+if(timeStatus() != timeSet) 
+  Serial.println("Unable to sync with the RTC");
+else
+  Serial.println("RTC has set the system time");  
 
 
 startscreen();      // Show Startscreen
 }
 /******************************************************************Main**************************************************************/
 void loop() {
-//Controals the logbook writing speed
+updateRTCTime(); //update Clock
+//Controls the logbook writing speed
 simMode = 0;  //reset the simmode
-if(timeSinceLastEntery + updateSpeedLogbook < millis()){
+if((timeSinceLastEntery + updateSpeedLogbook) < millis()){
   //Add the variables from runtime in to the structure
   config.index = config.index + 1;
   strlcpy(config.time,            
           Time,  
           sizeof(config.time)); 
+  strlcpy(config.date,            
+          Date,  
+          sizeof(config.date)); 
   strlcpy(config.skipper,            
           currentSkipperName.c_str(),  
           sizeof(config.skipper));  
@@ -415,6 +461,7 @@ if(timeSinceLastEntery + updateSpeedLogbook < millis()){
   config.lat = lastGpsPositionLat;
   config.lon = lastGpsPositionLng;
   jsonToSd(logbook, config);  //write the data on the SDCard
+  timeSinceLastEntery = millis();
   if(useSimflag == true){
     simMode = 1;
   }
@@ -435,20 +482,7 @@ if(timeSinceLastEntery + updateSpeedLogbook < millis()){
       send_SMS();
     break;
   }
-updateGPSTime(); //Check if the Time is drifting and update from the GPS Time
-
-/*This code controls the logbook with all its variables its reading from and writing too the logbook
-jsonFromSd(logbook, config);
-Serial.println(config.index);
-Serial.println(config.time);
-Serial.println(config.skipper);
-Serial.println(config.speed);
-Serial.println(config.fuel);
-Serial.println(config.trip);
-Serial.println(config.runtime);
-Serial.println(config.lat);
-Serial.println(config.lon);
-*/
+//updateGPSTime(); //Check if the Time is drifting and update from the GPS Time not needed if set up from RTC
 
 //This code controls the upper display and also the Encoder Button and also navigating thrught the menu 
   if(userPushIncrement == true || userInMenue == true){
@@ -1427,7 +1461,42 @@ void GSMSignalStrenght()
   }
   }
 }
+long int syncProvider()
+{
+  return rtc.now().unixtime();  //either format works
+ // DateTime now = RTC.now();
+ // uint32_t s = now.unixtime();
+ // return s;
+}
+void updateRTCTime()
+{
+  DateTime now = rtc.now();
+  if(last_second != now.second())  // if time has changed
+      {
+        last_second = now.second();
+ 
+        // set current UTC time
+        setTime(Hour, Minute, Second, Day, Month, Year);
+        // add the offset to get local time
+        adjustTime(time_offset);
 
+        // update time array
+        Time[12] = second() / 10 + '0';
+        Time[13] = second() % 10 + '0';
+        Time[9]  = minute() / 10 + '0';
+        Time[10] = minute() % 10 + '0';
+        Time[6]  = hour()   / 10 + '0';
+        Time[7]  = hour()   % 10 + '0';
+ 
+        // update date array
+        Date[14] = (year()  / 10) % 10 + '0';
+        Date[15] =  year()  % 10 + '0';
+        Date[9]  =  month() / 10 + '0';
+        Date[10] =  month() % 10 + '0';
+        Date[6]  =  day()   / 10 + '0';
+        Date[7]  =  day()   % 10 + '0';
+      }
+}
 void updateGPSTime()
 {
   if(last_second != gps.time.second())  // if time has changed
@@ -1630,7 +1699,7 @@ void sendDataviaSIMtoServer(String postdata)
 void jsonToSd(const char *filename, const Config &config)
 {
   // Open file for writing
-  File file = SD.open(filename, FILE_WRITE);
+  File file = SD.open(filename, FILE_APPEND);
   if (!file) {
     Serial.println(F("Failed to create file"));
     return;
@@ -1644,6 +1713,7 @@ void jsonToSd(const char *filename, const Config &config)
   // Set the values in the document
   doc["index"] = config.index;
   doc["time"] = config.time;
+  doc["date"] = config.date;
   doc["skipper"] = config.skipper;
   doc["speed"] = config.speed;
   doc["fuel"] = config.fuel;
@@ -1656,7 +1726,7 @@ void jsonToSd(const char *filename, const Config &config)
   if (serializeJson(doc, file) == 0) {
     Serial.println(F("Failed to write to file"));
   }
-
+  file.print("\n");
   // Close the file
   file.close();
 // Prints the content of a file to the Serial
@@ -1681,6 +1751,9 @@ void jsonFromSd(const char *filename, Config &config) {
     strlcpy(config.time,            
           Time,  
           sizeof(config.time)); 
+    strlcpy(config.date,            
+          Date,  
+          sizeof(config.date)); 
   strlcpy(config.skipper,                  // <- destination
           doc["skipper"] | "default",  // <- source
           sizeof(config.skipper));         // <- destination's capacity
@@ -1706,6 +1779,7 @@ String jsonToString(const Config &config)
   // Set the values in the document
   doc["index"] = config.index;
   doc["time"] = config.time;
+  doc["date"] = config.date;
   doc["skipper"] = config.skipper;
   doc["speed"] = config.speed;
   doc["fuel"] = config.fuel;
