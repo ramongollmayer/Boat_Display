@@ -1,4 +1,7 @@
 /**************************************************************************
+ What to check?
+ Files erzeugen wenn diese noch nicht vorhanden sind + richtige formatierung um sie nicht  händisch erstellen zu müssen.
+
  Whats Next?
  Ändern des Logbook lesers auf letzte Zeile oder neues Speicher file?
  Uhrzeit einstellen ermöglichen.
@@ -12,7 +15,7 @@
  Code in funktionen umstrukturieren.
  Libary file für github erstellen.
  Schnittstelle für Motor auslesung erstellen.
- Files erzeugen wenn diese noch nicht vorhanden sind + richtige formatierung um sie nicht  händisch erstellen zu müssen.
+
 
  
  
@@ -138,6 +141,7 @@ File file;
 const char *skipperFile = "/SkipperList.txt";
 const char *simConfig = "/SimConfig.txt";
 const char *logbook = "/Logbook.txt";
+const char *savefile = "/Savefile.txt";
 
 //Logbook variables
 int currentSkipper = 1;
@@ -1793,4 +1797,40 @@ String jsonToString(const Config &config)
     Serial.println(F("Failed to write to file"));
   }
   return output;
+}
+
+void checkFiles(){  //Check if the files are on the SD-Card if not create a new file with the Standart Data in it.
+
+  if(!SD.exists(skipperFile)){
+    file = SD.open(skipperFile, FILE_READ);
+    file.println("default");
+    file.close;
+  }
+
+  if(!SD.exists(simConfig)){
+    file = SD.open(simConfig, FILE_READ);
+    file.println("true");
+    file.println("false");
+    file.println("false");
+    file.println("+436504443147");
+    file.println("0");
+    file.println("internet.t-mobile.com");
+    file.println("0");
+    file.println("0");
+    file.println("0");
+    file.println("0");
+    file.close;
+  }
+
+  if(!SD.exists(logbook)){
+    file = SD.open(logbook, FILE_READ);
+    file.println("{"index":0,"time":"TIME: 00:00:00","date":"DATE: 00-00-0000","skipper":"default\r","speed":0,"fuel":0,"trip":0,"runtime":0,"lat":0,"lon":0}");
+    file.close;
+  }
+
+  if(!SD.exists(savefile)){
+    file = SD.open(savefile, FILE_READ);
+    file.println("{"index":0,"time":"TIME: 00:00:00","date":"DATE: 00-00-0000","skipper":"default\r","speed":0,"fuel":0,"trip":0,"runtime":0,"lat":0,"lon":0}");
+    file.close;
+  }
 }
